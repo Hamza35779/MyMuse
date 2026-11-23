@@ -3,7 +3,7 @@
     "name": "MyMuse",
     "slug": "mymuse",
     "scheme": "mymuse",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "default",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
