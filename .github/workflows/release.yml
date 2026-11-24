@@ -26,6 +26,10 @@ jobs:
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:web
+        env:
+          # Blank keeps the localhost default. Set the MYMUSE_API_URL repository
+          # variable to ship clients that talk to a hosted API instead.
+          EXPO_PUBLIC_API_URL: ${{ vars.MYMUSE_API_URL }}
       - run: pnpm --dir apps/desktop exec electron-builder --publish never
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -62,6 +66,9 @@ jobs:
         run: pnpm exec expo prebuild --platform android --no-install
       - name: Build the APK
         working-directory: apps/mobile/android
+        # The JS bundle is generated here, so this is where the API URL is baked in.
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.MYMUSE_API_URL }}
         run: ./gradlew assembleRelease --no-daemon
       - name: Name the APK after the tag
         run: cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "apps/mobile/MyMuse-${{ github.ref_name }}.apk"
@@ -89,6 +96,8 @@ jobs:
         run: pod install
       - name: Build the app without signing
         working-directory: apps/mobile/ios
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.MYMUSE_API_URL }}
         run: |
           xcodebuild -workspace MyMuse.xcworkspace -scheme MyMuse -configuration Release \
             -sdk iphoneos -derivedDataPath build \

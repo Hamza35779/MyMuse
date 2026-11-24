@@ -145,7 +145,9 @@ For iOS or Android, use `pnpm --dir apps/mobile ios` or `pnpm --dir apps/mobile 
 
 ## Installable apps
 
-Both desktop and mobile builds are clients for an API server. Set `EXPO_PUBLIC_API_URL` to a reachable server (for example your Render URL) when you build; the default is `http://localhost:8787`.
+Both desktop and mobile builds are clients for an API server, so the address is compiled into the client: `EXPO_PUBLIC_API_URL` at build time, defaulting to `http://localhost:8787` (`10.0.2.2:8787` on an Android emulator). A build made with the default only works next to a local server — a phone or another computer needs a build that points at a reachable URL.
+
+For builds from GitHub Actions, set a repository **variable** (not a secret) under **Settings → Secrets and variables → Actions → Variables**: `MYMUSE_API_URL=https://your-api.example.com`. The desktop, Android and iOS jobs pass it to the bundle step, and leaving it unset keeps the localhost default. Local builds use the environment variable directly, for example `EXPO_PUBLIC_API_URL=http://192.168.1.20:8787 pnpm build:desktop:linux`.
 
 ### Desktop (Windows, macOS, Linux)
 
@@ -180,7 +182,7 @@ Run **Actions → Release → Run workflow**, or push a `v*` tag. Four jobs buil
 
 A tag run additionally creates the [GitHub Release](https://github.com/Hamza35779/MyMuse/releases) for that tag and attaches every file built in the run (`.exe`, `.msi`, `.dmg`, `.zip`, `.AppImage`, `.deb`, `.apk`, `.ipa`), so the version becomes downloadable from the Releases page. The last job of a run lists what it published.
 
-No repository secrets are required for those files: the mobile jobs generate their native projects locally with `expo prebuild` instead of calling EAS. The resulting APK is signed with the debug keystore and the `.ipa` is unsigned, so re-sign it with your Apple certificate before installing on a device.
+No repository secrets are required for those files: the mobile jobs generate their native projects locally with `expo prebuild` instead of calling EAS. The resulting APK is signed with the debug keystore and the `.ipa` is unsigned, so re-sign it with your Apple certificate before installing on a device. Add the `MYMUSE_API_URL` repository variable first if the app should talk to a hosted server rather than a local one.
 
 ### Store signing
 
