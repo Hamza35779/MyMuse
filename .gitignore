@@ -10,6 +10,8 @@ release/
 .mymuse/
 # Legacy name, kept so existing installs keep working.
 .openmuse/
+# Written by `npx copilotkit project select`; holds local project ids, not secrets.
+.copilotkit/
 apps/mobile/ios/
 apps/mobile/android/
 .DS_Store

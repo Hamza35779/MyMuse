@@ -79,22 +79,42 @@ corepack enable
 corepack prepare pnpm@11.19.0 --activate
 pnpm install --frozen-lockfile
 cp .env.example .env
-npx copilotkit@latest login
-npx copilotkit@latest project select
-# Set CPK_INTELLIGENCE_API_KEY in .env to the generated server-only project key.
-# Keep the CLI-generated CPK_TELEMETRY_ID too, including in deployed server environments.
-pnpm dev
+pnpm check:setup
 ```
 
-In another terminal:
+`pnpm check:setup` lists which credentials this checkout already has and which are still missing, without printing any values (`--local-only` stops after the local section). On a fresh clone it reports the missing Intelligence key; add that next. If `corepack` is unavailable, install the pinned version directly with `npm install -g pnpm@11.19.0`. With `nvm` or `fnm` on macOS or Linux, `nvm install 24` (or `fnm install 24`) selects the required Node release.
+
+### Get a CopilotKit Intelligence key
+
+Rich Threads keep conversations in CopilotKit Intelligence, so the API needs a project key in every mode. The no-cost Developer plan is enough for local work, and the sample workspace needs nothing else — no model, Google account, or Docker.
 
 ```sh
-pnpm dev:web
+npx copilotkit@latest login           # opens browser sign-in
+npx copilotkit@latest project select  # writes CPK_INTELLIGENCE_API_KEY and CPK_TELEMETRY_ID to .env
+pnpm check:setup                      # both now report as set
 ```
 
-Open [localhost:8081](http://localhost:8081). The API runs at [localhost:8787/api/health](http://localhost:8787/api/health).
+Both values are server-side secrets: they stay in `.env`, which is gitignored. The CLI also writes `.copilotkit/project.json` to remember which project this checkout belongs to; that directory is gitignored too, and no key belongs in a client build or in `EXPO_PUBLIC_*`. The API refuses to start without a key and says so: `MyMuse requires CPK_INTELLIGENCE_API_KEY`. When you deploy, set the same two variables on the API server — see [CopilotKit Rich Threads](#copilotkit-rich-threads).
 
-If `corepack` is unavailable, install the pinned version directly with `npm install -g pnpm@11.19.0`. With `nvm` or `fnm` on macOS or Linux, `nvm install 24` (or `fnm install 24`) selects the required Node release.
+### Run the sample workspace end to end
+
+```sh
+pnpm dev      # API on http://localhost:8787
+pnpm dev:web  # UI on http://localhost:8081, in a second terminal
+```
+
+Open [localhost:8081](http://localhost:8081). To confirm the conversation store works before touching the UI:
+
+```sh
+curl -s localhost:8787/api/health
+token=$(curl -s -X POST localhost:8787/api/session -H 'content-type: application/json' -d '{}' \
+  | node -pe 'JSON.parse(require("fs").readFileSync(0)).token')
+curl -s localhost:8787/api/main-thread -H "authorization: Bearer $token"
+```
+
+A working setup answers `{"ok":true,…,"mode":"sample"}` and then `{"threadId":"…","existing":true}`. If `/api/main-thread` returns 502 “Main conversation is unavailable”, the server started but Intelligence rejected the key — it is revoked, mistyped, or belongs to a different project. The API log shows a `401` from that call at the same moment (the smoke test logs it as `CLERK_TOKEN_INVALID`), and the Chat screen shows the same message instead of the conversation. Correct the key in `.env`, restart `pnpm dev`, and the request succeeds.
+
+For a native client, run `pnpm --dir apps/mobile android` or `ios`; an Android emulator reaches the API at `10.0.2.2:8787` by default, and `EXPO_PUBLIC_API_URL` points a device build at any reachable server.
 
 ### Work on your own copy
 
@@ -180,6 +200,8 @@ One-time setup:
 | `EXPO_ASC_APP_ID` | The numeric Apple ID of the app in App Store Connect. |
 | `EXPO_APPLE_TEAM_ID` | Your Apple Developer team ID. |
 | `PLAY_SERVICE_ACCOUNT_JSON` | The Play Console service-account JSON, with release permission on the app. |
+
+`pnpm check:setup` reports which of these secrets the repository already has, which are missing, and where each one comes from (it needs `gh` with admin access to read them; a local `.env` value counts as “in .env only”).
 
 A tag run then builds the signed bundle and IPA, attaches `MyMuse-<tag>-store-android.aab` and `MyMuse-<tag>-store-ios.ipa` to the release, and submits each build by ID. The jobs skip with a notice while `EXPO_TOKEN` or `extra.eas.projectId` is missing, and each store upload only runs when its own secrets are present, so Android can ship before Apple is set up.
 

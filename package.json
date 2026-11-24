@@ -17,6 +17,7 @@
     "test:browser": "node --experimental-strip-types --test apps/worker/tests/lifecycle.test.ts",
     "typecheck": "tsc --noEmit && pnpm --dir apps/mobile typecheck",
     "lint": "biome check .",
+    "check:setup": "node scripts/check-setup.mjs",
     "format": "biome check --write .",
     "build:server": "tsc -p tsconfig.build.json",
     "start": "node dist/apps/server/src/index.js",
