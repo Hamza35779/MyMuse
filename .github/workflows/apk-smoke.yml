@@ -43,13 +43,21 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk ../../../apk/MyMuse.apk
           ls -l ../../../apk
       - name: Start the API and a logging proxy
+        env:
+          CPK_INTELLIGENCE_API_KEY: ${{ secrets.CPK_INTELLIGENCE_API_KEY }}
         run: |
           set -euo pipefail
-          # No CopilotKit key is available here, but the server only needs one to
-          # be non-empty in sample mode. Protected routes answer 401 without a
-          # session, which still proves the app reached the API.
+          # With the repository secret the sample workspace loads real Rich
+          # Threads, so the conversation renders. Without it the server still
+          # starts, but it can only prove that the APK reached the API.
+          key="${CPK_INTELLIGENCE_API_KEY:-smoke-test-placeholder}"
+          if [ -n "$CPK_INTELLIGENCE_API_KEY" ]; then
+            echo "Using the CPK_INTELLIGENCE_API_KEY secret for Rich Threads"
+          else
+            echo "::notice::No CPK_INTELLIGENCE_API_KEY secret, so the conversation store cannot load; add one from 'npx copilotkit@latest project select'."
+          fi
           WORKSPACE_MODE=sample COPILOTKIT_TELEMETRY_DISABLED=true \
-            CPK_INTELLIGENCE_API_KEY=smoke-test-placeholder PORT=8788 pnpm dev > /tmp/api.log 2>&1 &
+            CPK_INTELLIGENCE_API_KEY="$key" PORT=8788 pnpm dev > /tmp/api.log 2>&1 &
           ready=false
           for _ in $(seq 1 60); do
             if curl -sf http://127.0.0.1:8788/api/health >/dev/null; then ready=true; break; fi

@@ -9,8 +9,15 @@
     },
     "production": {
       "autoIncrement": true,
-      "android": { "buildType": "app-bundle" }
+      "credentialsSource": "remote",
+      "android": { "buildType": "app-bundle" },
+      "ios": { "simulator": false }
     }
   },
-  "submit": { "production": {} }
+  "submit": {
+    "production": {
+      "android": { "track": "internal" },
+      "ios": {}
+    }
+  }
 }

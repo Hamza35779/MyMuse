@@ -137,6 +137,9 @@ jobs:
     needs: credentials
     if: needs.credentials.outputs.ready == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      android_build: ${{ steps.build.outputs.android_build }}
+      ios_build: ${{ steps.build.outputs.ios_build }}
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
@@ -147,6 +150,7 @@ jobs:
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - run: pnpm install --frozen-lockfile
       - name: Build the signed AAB and App Store IPA
+        id: build
         working-directory: apps/mobile
         run: |
           pnpm exec eas build --platform all --profile production --non-interactive --wait --json > "$RUNNER_TEMP/store.json"
@@ -159,11 +163,11 @@ jobs:
                 console.error(`No artifact URL for ${platform}`, JSON.stringify(build).slice(0, 1000));
                 process.exit(1);
               }
-              console.log(`${platform} ${url}`);
+              console.log(`${platform} ${build.id} ${url}`);
             }
           ' "$RUNNER_TEMP/store.json" > "$RUNNER_TEMP/urls.txt"
           cat "$RUNNER_TEMP/urls.txt"
-          while read -r platform url; do
+          while read -r platform build url; do
             case "$platform" in
               android) ext=aab ;;
               ios) ext=ipa ;;
@@ -172,6 +176,8 @@ jobs:
             curl -fL "$url" -o "MyMuse-${{ github.ref_name }}-store-$platform.$ext"
           done < "$RUNNER_TEMP/urls.txt"
           ls -l *-store-*.*
+          echo "android_build=$(awk '$1 == "android" { print $2 }' "$RUNNER_TEMP/urls.txt")" >> "$GITHUB_OUTPUT"
+          echo "ios_build=$(awk '$1 == "ios" { print $2 }' "$RUNNER_TEMP/urls.txt")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: store-builds
@@ -179,6 +185,73 @@ jobs:
           path: |
             apps/mobile/*-store-*.aab
             apps/mobile/*-store-*.ipa
+
+  submit:
+    name: Submit to the stores
+    needs: [credentials, store]
+    if: needs.credentials.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_APPLE_ID: ${{ secrets.EXPO_APPLE_ID }}
+      EXPO_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.EXPO_APPLE_APP_SPECIFIC_PASSWORD }}
+      EXPO_ASC_APP_ID: ${{ secrets.EXPO_ASC_APP_ID }}
+      EXPO_APPLE_TEAM_ID: ${{ secrets.EXPO_APPLE_TEAM_ID }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - run: pnpm install --frozen-lockfile
+      - name: Work out which stores can accept a build
+        run: |
+          ios=false
+          if [ -n "$EXPO_APPLE_ID" ] && [ -n "$EXPO_APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$EXPO_ASC_APP_ID" ] && [ -n "$EXPO_APPLE_TEAM_ID" ]; then
+            ios=true
+          fi
+          android=false
+          if [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            android=true
+          fi
+          echo "SUBMIT_IOS=$ios" >> "$GITHUB_ENV"
+          echo "SUBMIT_ANDROID=$android" >> "$GITHUB_ENV"
+          echo "App Store Connect: $ios, Google Play: $android"
+      - name: Write the Play service account key
+        if: env.SUBMIT_ANDROID == 'true'
+        run: |
+          key="$RUNNER_TEMP/play-service-account.json"
+          printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$key"
+          echo "PLAY_SERVICE_ACCOUNT_KEY=$key" >> "$GITHUB_ENV"
+      - name: Point the submit profile at the repository secrets
+        working-directory: apps/mobile
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const config = JSON.parse(fs.readFileSync("eas.json", "utf8"));
+            const profile = config.submit.production;
+            if (process.env.SUBMIT_IOS === "true") {
+              profile.ios = {
+                ...profile.ios,
+                ascAppId: process.env.EXPO_ASC_APP_ID,
+                appleTeamId: process.env.EXPO_APPLE_TEAM_ID,
+              };
+            }
+            if (process.env.SUBMIT_ANDROID === "true") {
+              profile.android = { ...profile.android, serviceAccountKeyPath: process.env.PLAY_SERVICE_ACCOUNT_KEY };
+            }
+            fs.writeFileSync("eas.json", `${JSON.stringify(config, null, 2)}\n`);
+            console.log(JSON.stringify(config.submit.production));
+          '
+      - name: Upload to App Store Connect
+        if: env.SUBMIT_IOS == 'true'
+        working-directory: apps/mobile
+        run: pnpm exec eas submit --platform ios --id "${{ needs.store.outputs.ios_build }}" --non-interactive
+      - name: Upload to Google Play
+        if: env.SUBMIT_ANDROID == 'true'
+        working-directory: apps/mobile
+        run: pnpm exec eas submit --platform android --id "${{ needs.store.outputs.android_build }}" --non-interactive
 
   publish:
     name: Publish the release

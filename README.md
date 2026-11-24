@@ -162,9 +162,28 @@ A tag run additionally creates the [GitHub Release](https://github.com/Hamza3577
 
 No repository secrets are required for those files: the mobile jobs generate their native projects locally with `expo prebuild` instead of calling EAS. The resulting APK is signed with the debug keystore and the `.ipa` is unsigned, so re-sign it with your Apple certificate before installing on a device.
 
-Two optional jobs add store-ready artifacts, and they skip with a notice until the repository has an `EXPO_TOKEN` secret **and** `extra.eas.projectId` in `apps/mobile/app.json` (see the EAS setup above, plus Apple and Play credentials on your Expo account). They run `eas build --platform all --profile production` and attach the signed `MyMuse-<tag>-store-android.aab` and `MyMuse-<tag>-store-ios.ipa` to the tag release alongside the unsigned builds.
+### Store signing
 
-To check the APK actually runs, run **Actions → APK smoke test**. It builds the APK from the checkout, boots an Android 14 emulator, installs and launches it, then starts the sample API on the runner behind a logging proxy (`10.0.2.2:8787` inside the emulator is the runner's loopback) and fails unless the app opens a session by calling `POST /api/session`. The screenshot, logcat, and request log are kept as the `apk-smoke-evidence` artifact.
+The `production` profile in `apps/mobile/eas.json` builds an Android App Bundle and an App Store IPA with EAS-managed credentials (`"credentialsSource": "remote"`), and `submit.production` uploads them — Android to the Play internal track, iOS to App Store Connect. Both need accounts and signing material, so they run on your Expo, Apple and Google Play accounts, not on this repository.
+
+One-time setup:
+
+1. `npx eas-cli login`, then `npx eas-cli init` in `apps/mobile`, and commit the `extra.eas.projectId` it writes into `app.json`.
+2. `npx eas-cli credentials` in `apps/mobile` and let EAS generate the Android keystore and the iOS distribution certificate and provisioning profile for `app.mymuse.mobile`. They stay on EAS servers; never commit them.
+3. Add these repository secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+| --- | --- |
+| `EXPO_TOKEN` | A token from <https://expo.dev/settings/access-tokens>. |
+| `EXPO_APPLE_ID` | Your Apple Developer account email. |
+| `EXPO_APPLE_APP_SPECIFIC_PASSWORD` | An app-specific password from <https://appleid.apple.com>. |
+| `EXPO_ASC_APP_ID` | The numeric Apple ID of the app in App Store Connect. |
+| `EXPO_APPLE_TEAM_ID` | Your Apple Developer team ID. |
+| `PLAY_SERVICE_ACCOUNT_JSON` | The Play Console service-account JSON, with release permission on the app. |
+
+A tag run then builds the signed bundle and IPA, attaches `MyMuse-<tag>-store-android.aab` and `MyMuse-<tag>-store-ios.ipa` to the release, and submits each build by ID. The jobs skip with a notice while `EXPO_TOKEN` or `extra.eas.projectId` is missing, and each store upload only runs when its own secrets are present, so Android can ship before Apple is set up.
+
+To check the APK actually runs, run **Actions → APK smoke test**. It builds the APK from the checkout, boots an Android 14 emulator, installs and launches it, then starts the sample API on the runner behind a logging proxy (`10.0.2.2:8787` inside the emulator is the runner's loopback) and fails unless the app opens a session by calling `POST /api/session`. Add a `CPK_INTELLIGENCE_API_KEY` repository secret and the run also loads the real conversation store; without it the server starts with a placeholder key and only proves that the APK reached the API. The screenshot, logcat, and request log are kept as the `apk-smoke-evidence` artifact.
 
 ## Deploy on Render
 
