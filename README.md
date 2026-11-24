@@ -256,13 +256,26 @@ The Docker computer and Google mail or calendar need the setup in the sections b
 
 Copy the commented settings in [.env.example](.env.example) into your private `.env`:
 
-1. Set `AGENT_BACKEND=model`, `MODEL=provider/model-id`, and the matching provider key. CopilotKit supports the configured OpenAI, Anthropic or Google provider. Fictional data can still be used with a real model. Provider keys stay on the server.
+1. Set `AGENT_BACKEND=model`, `MODEL=provider/model-id`, and the matching provider key. CopilotKit supports the configured OpenAI, Anthropic or Google provider. Fictional data can still be used with a real model. Provider keys stay on the server. For a free model that needs no account, see [Run a model on this machine](#run-a-model-on-this-machine).
 2. Create or select a CopilotKit Intelligence project with `npx copilotkit@latest login` and `npx copilotkit@latest project select`. Keep the generated `CPK_INTELLIGENCE_API_KEY` on the server.
 3. For personal mail/calendar, set `WORKSPACE_MODE=live`, the generated `CPK_INTELLIGENCE_API_KEY`, a random `MYMUSE_ACCESS_KEY` of at least 24 characters, and `TOKEN_ENCRYPTION_KEY` containing 32 random bytes encoded as base64. Restart the API.
 4. Configure a Google OAuth web client with Gmail and Calendar APIs enabled. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; register `${PUBLIC_API_URL}/api/google/callback` as its redirect URI. Configure consent/test-user access in your Google project.
 5. Open **Apps → Gmail** (or **Google Calendar**), connect read access, and grant write access when needed. Every send or calendar change still requires its own stored review. Changing/disconnecting the account invalidates pending connection-bound work.
 
 Google credentials are encrypted at rest. File URLs and browser consoles use short-lived signatures. This deployment uses one owner protected by a shared access key; it is not a multi-tenant authentication system. Use HTTPS and restricted network access for a remote host. Keep the default local-data mode on loopback.
+
+### Run a model on this machine
+
+No key, no account, no billing: the chat can run against a model that lives on your computer.
+
+```sh
+pnpm model:local --write-env   # start the local server, download a model, update .env
+pnpm dev                       # restart the API to pick up the new .env
+```
+
+The script uses [Ollama](https://ollama.com/download) and downloads `qwen2.5:1.5b` by default; pass `--model qwen2.5:7b` (or any model you have downloaded) for better answers if your machine has the memory. Without `--write-env` it only checks the setup and prints the values to add. Any OpenAI-compatible local server works too — LM Studio on port 1234, llama.cpp, vLLM — by setting `OPENAI_BASE_URL`, `OPENAI_CHAT_COMPLETIONS=true` and any non-empty `OPENAI_API_KEY`.
+
+Sizing: the MyMuse system prompt is long, so replies cost a few thousand prompt tokens before the first word. A 1.5B model on two CPU cores takes a couple of minutes per reply; on a normal laptop expect seconds. Below roughly 3B parameters answers get noticeably shallow. Local models do not get tool calls as reliably as hosted providers, so delegated tasks and Google work may be worse than with a paid model.
 
 ## Public web search
 
